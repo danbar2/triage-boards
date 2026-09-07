@@ -13,6 +13,16 @@ defaults:
     - issue_type
     - priority
 
+  # Projects-v2 `Status` values that mean the item is actively being worked on.
+  # Such an item goes to the "In progress" column instead of the maintainer
+  # queue. Matched ignoring case and punctuation, so one entry covers the
+  # boards' different spellings ("In-Progress", "In Progress", "In progress").
+  # An issue with an open PR that closes it is always treated as in progress.
+  in_progress_statuses:
+    - in progress
+    - in review
+    - in development
+
   # Logins whose activity is ignored entirely (never counts as meaningful
   # activity). Any login ending in "[bot]" is also ignored automatically.
   bots:

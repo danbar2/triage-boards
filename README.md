@@ -28,11 +28,21 @@ first:
 | **Awaiting maintainer** | Author/community acted last (replied, pushed, resolved threads) — the working queue |
 | **Awaiting author** | A maintainer responded last; ball is with the author |
 | **Triaged backlog** | Issues with the `triaged_when_set` fields (issue type + Priority) all set — already triaged, no first response needed |
+| **In progress** | Work is under way: an open PR closes the issue, or its project `Status` is one of `in_progress_statuses` |
 | **Stale** | No meaningful activity for 80+ days (either direction) |
 
 Classification rule: if the last non-bot actor is a maintainer (and not the
 item's own author), the item is *awaiting author*; otherwise it's *awaiting
 maintainer* (or *needs first response* if no maintainer has ever engaged).
+An item that is already being worked on is not waiting on anyone, so *in
+progress* takes over from *needs first response*, *awaiting maintainer*, and
+*triaged backlog* — it never hides an item from *awaiting author*, and *stale*
+still wins over everything.
+
+Inline (diff) comments count as engagement in full: only the review that
+*opens* a review thread appears in the PR timeline, so every comment of every
+thread is read as well — otherwise a maintainer who answered inside a thread
+looks like they never engaged.
 
 The header has a PRs/Issues toggle and a **user filter** — a dropdown of every
 person actually involved with an item (author, assignee, or anyone who
@@ -62,12 +72,15 @@ contain no credentials and perform no GitHub operations. For an immediate
 rebuild, run the workflow manually (Actions tab → "Run workflow", or
 `gh workflow run dashboard.yml -R danbar2/triage-boards`).
 
-### Project fields (Priority / Severity)
+### Project fields (Status / Priority / Severity)
 
-The type comes from GitHub's native issue type; Priority and Severity are read
-from the issue's GitHub Project (v2) single-select fields named `Priority` and
-`Severity` (case-insensitive, any linked project — e.g. Grove's roadmap board
-and [run-ai/projects/7](https://github.com/orgs/run-ai/projects/7) for Karta).
+The type comes from GitHub's native issue type; Status, Priority and Severity
+are read from the issue's GitHub Project (v2) single-select fields of those
+names (case-insensitive, any linked project — e.g. Grove's roadmap board and
+[run-ai/projects/7](https://github.com/orgs/run-ai/projects/7) for Karta).
+`Status` drives the *In progress* column via `in_progress_statuses`, matched
+ignoring case and punctuation so one entry covers every board's spelling
+(`In-Progress`, `In Progress`, `In progress`).
 Reading Projects v2 requires a token with the `read:project` scope, which
 neither the default Actions token nor a plain `repo` PAT has. To enable the
 check, add a repo secret named **`PROJECTS_TOKEN`** containing a PAT with
@@ -76,7 +89,8 @@ authorized for every org whose projects it must read. Note: the NVIDIA
 enterprise rejects classic PATs with a lifetime over 366 days, so set the
 token's expiration to a year or less. Without a working token the boards still
 work — they just can't see those fields, log a warning, and treat no issue as
-triaged.
+triaged; *In progress* then falls back to the linked-PR signal alone, which
+needs no extra scope.
 
 ## Running locally
 

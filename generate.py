@@ -55,10 +55,10 @@ query($owner: String!, $name: String!, $cursor: String) {
             ... on ReadyForReviewEvent { createdAt actor { login } }
           }
         }
-        reviewThreads(first: 100) {
+        reviewThreads(first: 60) {
           nodes {
             isResolved
-            comments(last: 1) { nodes { createdAt author { login } } }
+            comments(first: 50) { nodes { createdAt author { login } } }
           }
         }
       }
@@ -81,6 +81,9 @@ query($owner: String!, $name: String!, $cursor: String) {
         assignees(first: 10) { nodes { login } }
         issueType { name }
         labels(first: 10) { nodes { name } }
+        closedByPullRequestsReferences(first: 10, includeClosedPrs: false) {
+          nodes { number url isDraft }
+        }
         timelineItems(last: 60, itemTypes: [ISSUE_COMMENT]) {
           nodes {
             __typename
@@ -133,6 +136,8 @@ SECTIONS = [
      "A maintainer responded last — the ball is with the author."),
     ("triaged", "Triaged backlog",
      "Type and priority are set — already triaged, no first response needed."),
+    ("in_progress", "In progress",
+     "Actively being worked on: an open PR is linked, or the project Status says so."),
     ("stale", "Stale",
      "No meaningful activity for a long time (in either direction)."),
 ]
@@ -142,6 +147,15 @@ ISSUE_TYPES = ["Task", "Bug", "Feature"]
 
 def parse_ts(s):
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
+def norm_status(s):
+    """Fold a project Status value to a comparable form.
+
+    Boards spell the same stage differently ("In-Progress", "In Progress",
+    "In progress"), so punctuation and case are dropped before matching.
+    """
+    return " ".join("".join(c if c.isalnum() else " " for c in (s or "")).split()).lower()
 
 
 def gql(session, query, variables):
@@ -198,16 +212,27 @@ def collect_events(node, is_pr, bots):
             actor = (item.get("actor") or {}).get("login")
             events.append((parse_ts(item["createdAt"]), actor, "marked ready for review"))
 
+    # Inline (diff) comments. Only the review that *opens* a thread shows up as
+    # a PullRequestReview timeline item — later replies inside the thread exist
+    # nowhere else, so every comment of every thread has to be read here or a
+    # maintainer who answered inline looks like they never engaged.
     if is_pr:
+        seen = {(ts, actor) for ts, actor, _ in events}
         for thread in node.get("reviewThreads", {}).get("nodes", []):
-            for c in thread["comments"]["nodes"]:
+            for i, c in enumerate(thread["comments"]["nodes"]):
                 actor = (c.get("author") or {}).get("login")
-                events.append((parse_ts(c["createdAt"]), actor, "replied in a review thread"))
+                ts = parse_ts(c["createdAt"])
+                if (ts, actor) in seen:
+                    continue  # same event, already counted from the timeline
+                seen.add((ts, actor))
+                events.append((ts, actor, "replied in a review thread" if i
+                               else "commented on the diff"))
 
     return [(ts, actor, desc) for ts, actor, desc in events if not is_bot(actor, bots)]
 
 
-def classify(node, is_pr, maintainers, bots, stale_cutoff, triaged_when_set):
+def classify(node, is_pr, maintainers, bots, stale_cutoff, triaged_when_set,
+             in_progress_statuses):
     author = (node.get("author") or {}).get("login") or "ghost"
     events = collect_events(node, is_pr, bots)
     if not events:
@@ -239,8 +264,19 @@ def classify(node, is_pr, maintainers, bots, stale_cutoff, triaged_when_set):
             fname = ((fv.get("field") or {}).get("name") or "").lower()
             if fname and fv.get("name"):
                 fields[fname] = fv["name"]
+    # Work already under way isn't waiting on the maintainers: an issue with an
+    # open PR that closes it, or one the project board marks as in progress, is
+    # being worked on even if the last word came from the author.
+    linked_prs = [{"number": p["number"], "url": p["url"], "is_draft": p["isDraft"]}
+                  for p in ((node.get("closedByPullRequestsReferences") or {})
+                            .get("nodes") or [])]
+    in_progress = (bool(linked_prs)
+                   or norm_status(fields.get("status")) in in_progress_statuses)
+
     triage_values = {"issue_type": issue_type, **fields}
-    if (state == "needs_first_response" and triaged_when_set
+    if in_progress and state in ("needs_first_response", "awaiting_maintainer"):
+        state = "in_progress"
+    elif (state == "needs_first_response" and triaged_when_set
             and all(triage_values.get(f) for f in triaged_when_set)):
         state = "triaged"
 
@@ -279,6 +315,7 @@ def classify(node, is_pr, maintainers, bots, stale_cutoff, triaged_when_set):
         "is_draft": node.get("isDraft", False),
         "labels": [l["name"] for l in node["labels"]["nodes"]],
         "issue_type": issue_type,
+        "linked_prs": linked_prs,
         "priority": fields.get("priority"),
         "severity": fields.get("severity"),
         "project_fields": fields,
@@ -323,6 +360,7 @@ BASE_CSS = """
   .cnt.awaiting_maintainer { background: var(--or-bg); color: var(--orange); }
   .cnt.awaiting_author { background: var(--mut-bg); color: var(--subtle); }
   .cnt.triaged { background: var(--grn-bg); color: var(--green); }
+  .cnt.in_progress { background: var(--sel-bg); color: var(--blue); }
   .cnt.stale { background: var(--pur-bg); color: var(--purple); }
 """
 
@@ -380,6 +418,7 @@ PAGE_TEMPLATE = """<!doctype html>
   .badge.warn { background: var(--yel-bg); color: var(--yellow); }
   .badge.bad { background: var(--red-bg); color: var(--red); }
   .badge.mut { background: var(--mut-bg); color: var(--subtle); }
+  .badge.link { background: var(--sel-bg); color: var(--blue); }
   .meta { color: var(--subtle); font-size: 13px; margin-bottom: 8px; }
   .meta b { color: var(--text); font-weight: 600; }
   .foot { display: flex; justify-content: space-between; align-items: center; }
@@ -454,10 +493,16 @@ PAGE_TEMPLATE = """<!doctype html>
     if (it.ci_state === 'FAILURE' || it.ci_state === 'ERROR') out.push(['CI failing', 'bad']);
     if (it.ci_state === 'PENDING') out.push(['CI pending', 'mut']);
     if (it.unresolved_threads) out.push([it.unresolved_threads + ' unresolved', 'warn']);
-    if (!out.length) return '';
+    // Open PRs that close this issue — the reason it sits in "In progress".
+    var links = (it.linked_prs || []).map(function (p) {
+      return '<a class="badge link" href="' + esc(p.url) + '" target="_blank" ' +
+        'rel="noopener" title="Open PR that closes this issue">PR #' + p.number +
+        (p.is_draft ? ' (draft)' : '') + '</a>';
+    }).join('');
+    if (!out.length && !links) return '';
     return '<div class="badges">' + out.map(function (b) {
       return '<span class="badge ' + b[1] + '">' + esc(b[0]) + '</span>';
-    }).join('') + '</div>';
+    }).join('') + links + '</div>';
   }
 
   function typeIcon(it) {
@@ -742,10 +787,11 @@ def build_project(cfg, token, now, out_dir):
     print(f"Fetched {len(prs)} open PRs, {len(issues)} open issues")
 
     triaged_when_set = [f.lower() for f in cfg.get("triaged_when_set", [])]
-    items = ([classify(n, True, maintainers, bots, stale_cutoff, triaged_when_set)
-              for n in prs]
-             + [classify(n, False, maintainers, bots, stale_cutoff, triaged_when_set)
-                for n in issues])
+    in_progress_statuses = {n for n in map(norm_status,
+                                           cfg.get("in_progress_statuses", [])) if n}
+    args = (maintainers, bots, stale_cutoff, triaged_when_set, in_progress_statuses)
+    items = ([classify(n, True, *args) for n in prs]
+             + [classify(n, False, *args) for n in issues])
 
     # Project metadata for client-side priority editing: the most common
     # project across issues, plus its Priority single-select field/options.
