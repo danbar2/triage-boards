@@ -134,10 +134,9 @@ SECTIONS = [
      "The author/community acted last (replied, pushed, resolved threads) — the working queue."),
     ("awaiting_author", "Awaiting author",
      "A maintainer responded last — the ball is with the author."),
-    ("triaged", "Triaged backlog",
-     "Type and priority are set — already triaged, no first response needed."),
     ("in_progress", "In progress",
-     "Actively being worked on: an open PR is linked, or the project Status says so."),
+     "Under way, not waiting on triage: an open PR is linked, the project "
+     "Status says so, or type and priority are already set."),
     ("stale", "Stale",
      "No meaningful activity for a long time (in either direction)."),
 ]
@@ -252,8 +251,8 @@ def classify(node, is_pr, maintainers, bots, stale_cutoff, triaged_when_set,
     else:
         state = "awaiting_maintainer"
 
-    # Issues whose triage fields (config: triaged_when_set) are all filled in
-    # are considered triaged: no first response needed even without a comment.
+    # The issue's own type plus every single-select value from its projects,
+    # keyed by lowercased field name (priority, severity, status, …).
     issue_type = (node.get("issueType") or {}).get("name")
     fields = {}
     project_items = []
@@ -266,19 +265,20 @@ def classify(node, is_pr, maintainers, bots, stale_cutoff, triaged_when_set,
                 fields[fname] = fv["name"]
     # Work already under way isn't waiting on the maintainers: an issue with an
     # open PR that closes it, or one the project board marks as in progress, is
-    # being worked on even if the last word came from the author.
+    # being worked on even if the last word came from the author. An issue whose
+    # triage fields (config: triaged_when_set) are all filled in has likewise
+    # been dealt with — it needs no first response.
     linked_prs = [{"number": p["number"], "url": p["url"], "is_draft": p["isDraft"]}
                   for p in ((node.get("closedByPullRequestsReferences") or {})
                             .get("nodes") or [])]
-    in_progress = (bool(linked_prs)
-                   or norm_status(fields.get("status")) in in_progress_statuses)
-
     triage_values = {"issue_type": issue_type, **fields}
+    in_progress = (bool(linked_prs)
+                   or norm_status(fields.get("status")) in in_progress_statuses
+                   or (bool(triaged_when_set)
+                       and all(triage_values.get(f) for f in triaged_when_set)))
+
     if in_progress and state in ("needs_first_response", "awaiting_maintainer"):
         state = "in_progress"
-    elif (state == "needs_first_response" and triaged_when_set
-            and all(triage_values.get(f) for f in triaged_when_set)):
-        state = "triaged"
 
     section = "stale" if last_ts < stale_cutoff else state
 
@@ -359,7 +359,6 @@ BASE_CSS = """
   .cnt.needs_first_response { background: var(--red-bg); color: var(--red); }
   .cnt.awaiting_maintainer { background: var(--or-bg); color: var(--orange); }
   .cnt.awaiting_author { background: var(--mut-bg); color: var(--subtle); }
-  .cnt.triaged { background: var(--grn-bg); color: var(--green); }
   .cnt.in_progress { background: var(--sel-bg); color: var(--blue); }
   .cnt.stale { background: var(--pur-bg); color: var(--purple); }
 """
@@ -536,7 +535,7 @@ PAGE_TEMPLATE = """<!doctype html>
   }
 
   // The server bakes each item's `state` (needs_first_response, awaiting_*,
-  // triaged) and its `section` at generation time. Only the stale overlay is
+  // in_progress) and its `section` at generation time. Only the stale overlay is
   // time-dependent, so recompute the section against the *current* clock on
   // every render — an item silently crosses into Stale once it passes the
   // stale_days cutoff, without waiting for the next scheduled rebuild.

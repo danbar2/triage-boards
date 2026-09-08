@@ -27,17 +27,16 @@ first:
 | **Needs first response** | No maintainer has engaged yet |
 | **Awaiting maintainer** | Author/community acted last (replied, pushed, resolved threads) — the working queue |
 | **Awaiting author** | A maintainer responded last; ball is with the author |
-| **Triaged backlog** | Issues with the `triaged_when_set` fields (issue type + Priority) all set — already triaged, no first response needed |
-| **In progress** | Work is under way: an open PR closes the issue, or its project `Status` is one of `in_progress_statuses` |
+| **In progress** | Dealt with, not waiting on triage — any of: an open PR closes the issue, its project `Status` is one of `in_progress_statuses`, or the `triaged_when_set` fields (issue type + Priority) are all set |
 | **Stale** | No meaningful activity for 80+ days (either direction) |
 
 Classification rule: if the last non-bot actor is a maintainer (and not the
 item's own author), the item is *awaiting author*; otherwise it's *awaiting
 maintainer* (or *needs first response* if no maintainer has ever engaged).
 An item that is already being worked on is not waiting on anyone, so *in
-progress* takes over from *needs first response*, *awaiting maintainer*, and
-*triaged backlog* — it never hides an item from *awaiting author*, and *stale*
-still wins over everything.
+progress* takes over from *needs first response* and *awaiting maintainer* —
+it never hides an item from *awaiting author*, and *stale* still wins over
+everything.
 
 Inline (diff) comments count as engagement in full: only the review that
 *opens* a review thread appears in the PR timeline, so every comment of every

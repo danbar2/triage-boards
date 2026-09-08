@@ -6,18 +6,19 @@ defaults:
   # Days without meaningful activity before an item is moved to the Stale column
   stale_days: 80
 
-  # An issue with ALL of these fields set is considered triaged and skips
-  # "Needs first response". issue_type is GitHub's native type (Bug/Feature/
-  # Task); other entries are Projects-v2 single-select field names (lowercase).
+  # An issue with ALL of these fields set has already been triaged, so it moves
+  # to "In progress" instead of the maintainer queue. issue_type is GitHub's
+  # native type (Bug/Feature/Task); other entries are Projects-v2 single-select
+  # field names (lowercase).
   triaged_when_set:
     - issue_type
     - priority
 
-  # Projects-v2 `Status` values that mean the item is actively being worked on.
-  # Such an item goes to the "In progress" column instead of the maintainer
-  # queue. Matched ignoring case and punctuation, so one entry covers the
-  # boards' different spellings ("In-Progress", "In Progress", "In progress").
-  # An issue with an open PR that closes it is always treated as in progress.
+  # Projects-v2 `Status` values that mean the item is actively being worked on
+  # — the third route into "In progress". Matched ignoring case and
+  # punctuation, so one entry covers the boards' different spellings
+  # ("In-Progress", "In Progress", "In progress"). An issue with an open PR
+  # that closes it is always treated as in progress.
   in_progress_statuses:
     - in progress
     - in review
