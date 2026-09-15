@@ -12,6 +12,7 @@ page always serves the latest snapshot — no viewer tokens, no editing.
 | [Grove](https://danbar2.github.io/triage-boards/grove/) | [ai-dynamo/grove](https://github.com/ai-dynamo/grove) |
 | [KAI Scheduler](https://danbar2.github.io/triage-boards/kai/) | [kai-scheduler/KAI-Scheduler](https://github.com/kai-scheduler/KAI-Scheduler) |
 | [Karta](https://danbar2.github.io/triage-boards/karta/) | [run-ai/karta](https://github.com/run-ai/karta) |
+| [Snapshot](https://danbar2.github.io/triage-boards/snapshot/) | [ai-dynamo/snapshot](https://github.com/ai-dynamo/snapshot) |
 
 ## What each board shows
 

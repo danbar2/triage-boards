@@ -99,3 +99,22 @@ projects:
       - rogirun
       - davidLif
       - TomB30
+
+  snapshot:
+    title: Snapshot triage board
+    repo:
+      owner: ai-dynamo
+      name: snapshot
+    # Code owners for the whole repo (MAINTAINERS.md / .github/CODEOWNERS)
+    maintainers:
+      - shmuel-runai
+      - shayasoolin
+      - danbar2
+      - Ronkahn21
+      - oleg-kushniriov
+      - yoedgin
+      - dfeigin-nv
+      - galletas1712
+      - julienmancuso
+      - Hutm
+      - hhzhang16
