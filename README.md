@@ -102,6 +102,12 @@ open dist/index.html
 
 ## Refresh
 
+Every board page re-fetches its `data.json` on load, and the ↻ button in the
+header does the same on demand, so neither waits on the Pages cache. Neither
+can start a rebuild: the page holds no token. The "rebuild now" link in the
+header opens the workflow page, where anyone with write access to this repo
+can press "Run workflow".
+
 The workflow also runs on every push to `main` and can be triggered manually:
 
 ```sh

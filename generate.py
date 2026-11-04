@@ -454,6 +454,7 @@ PAGE_TEMPLATE = """<!doctype html>
   </div>
   <select class="usersel" id="user" title="Show only items this user appears in (author, assignee, reviewer, commenter)"></select>
   <button class="gear" id="drafts" title="Hide draft pull requests">Hide drafts</button>
+  <button class="gear" id="refresh" title="Load the newest snapshot without reloading the page">↻</button>
   <button class="gear" id="theme" title="Toggle dark/light mode">🌙</button>
 </header>
 <div class="board" id="board"></div>
@@ -650,7 +651,9 @@ PAGE_TEMPLATE = """<!doctype html>
       '<a href="https://github.com/' + D.repo.owner + '/' + D.repo.name + '" target="_blank" rel="noopener">' +
       D.repo.owner + '/' + D.repo.name + '</a> · updated ' + relTime(D.generated_at) +
       ' <span title="' + gen.toISOString() + '">(' + gen.toUTCString().slice(5, 22) + ' UTC)</span>' +
-      ' · auto-refreshes every ~15 min · <a href="data.json">data.json</a>' +
+      ' · rebuilt every ~15 min' +
+      ' (<a href="__WORKFLOW_URL__" target="_blank" rel="noopener" title="Run the build workflow now (needs write access to the boards repo)">rebuild now</a>)' +
+      ' · <a href="data.json">data.json</a>' +
       ' · <a href="../">all boards</a>';
   }
 
@@ -660,16 +663,30 @@ PAGE_TEMPLATE = """<!doctype html>
 
   // The Pages CDN caches this page for 10 minutes; a cache-busted data.json
   // fetch on every load makes a plain refresh always show the newest snapshot.
-  fetch('data.json?_=' + Date.now(), {cache: 'no-store'})
-    .then(function (r) { return r.json(); })
-    .then(function (d) {
-      if (d.generated_at && d.generated_at > D.generated_at) {
-        D.items = d.items;
-        D.generated_at = d.generated_at;
-        buildUserSelect(); render(); renderSub();
-      }
-    })
-    .catch(function () {});
+  // The ↻ button runs the same fetch on demand. Neither can start a rebuild:
+  // the page holds no token, so that stays a link to the workflow.
+  var refreshBtn = document.getElementById('refresh');
+  function refreshData() {
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = '…';
+    return fetch('data.json?_=' + Date.now(), {cache: 'no-store'})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.generated_at && d.generated_at > D.generated_at) {
+          D.items = d.items;
+          D.generated_at = d.generated_at;
+          buildUserSelect(); render();
+        }
+        renderSub();
+      })
+      .catch(function () {})
+      .then(function () {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = '↻';
+      });
+  }
+  refreshBtn.addEventListener('click', refreshData);
+  refreshData();
 })();
 </script>
 </body>
@@ -694,7 +711,15 @@ def render_html(items, cfg, now, project_meta, triaged_when_set):
             .replace("__BASE_CSS__", BASE_CSS)
             .replace("__THEME_KEY__", THEME_KEY)
             .replace("__TITLE__", cfg["title"])
+            .replace("__WORKFLOW_URL__", workflow_url())
             .replace("__PAYLOAD__", blob))
+
+
+def workflow_url():
+    """Link to the build workflow's page, where "Run workflow" triggers a rebuild.
+    Actions sets GITHUB_REPOSITORY to the boards repo; local runs fall back."""
+    repo = os.environ.get("GITHUB_REPOSITORY", "danbar2/triage-boards")
+    return f"https://github.com/{repo}/actions/workflows/dashboard.yml"
 
 
 INDEX_TEMPLATE = """<!doctype html>
