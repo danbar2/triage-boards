@@ -7,7 +7,9 @@ defaults:
   stale_days: 80
 
   # An issue with ALL of these fields set has already been triaged, so it moves
-  # to "In progress" instead of the maintainer queue. issue_type is GitHub's
+  # to "In progress" instead of the maintainer queue. This is the only route
+  # out of "Needs first response": an issue with none of these set stays there
+  # even when a PR or an in-progress Status exists. issue_type is GitHub's
   # native type (Bug/Feature/Task); other entries are Projects-v2 single-select
   # field names (lowercase).
   triaged_when_set:
@@ -18,7 +20,8 @@ defaults:
   # — the third route into "In progress". Matched ignoring case and
   # punctuation, so one entry covers the boards' different spellings
   # ("In-Progress", "In Progress", "In progress"). An issue with an open PR
-  # that closes it is always treated as in progress.
+  # that closes it is treated the same way. Both only move an item out of
+  # "Awaiting maintainer", never out of "Needs first response".
   in_progress_statuses:
     - in progress
     - in review

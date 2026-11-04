@@ -129,7 +129,7 @@ query($id: ID!) {
 
 SECTIONS = [
     ("needs_first_response", "Needs first response",
-     "No maintainer has engaged yet."),
+     "No maintainer has engaged yet and the triage fields are not set."),
     ("awaiting_maintainer", "Awaiting maintainer",
      "The author/community acted last (replied, pushed, resolved threads) — the working queue."),
     ("awaiting_author", "Awaiting author",
@@ -267,17 +267,22 @@ def classify(node, is_pr, maintainers, bots, stale_cutoff, triaged_when_set,
     # open PR that closes it, or one the project board marks as in progress, is
     # being worked on even if the last word came from the author. An issue whose
     # triage fields (config: triaged_when_set) are all filled in has likewise
-    # been dealt with — it needs no first response.
+    # been dealt with. A PR or a Status value alone does not count as triage,
+    # though: an issue no maintainer has engaged with and whose triage fields
+    # are still empty stays in "Needs first response" until someone fills
+    # them in, however far along its PR is.
     linked_prs = [{"number": p["number"], "url": p["url"], "is_draft": p["isDraft"]}
                   for p in ((node.get("closedByPullRequestsReferences") or {})
                             .get("nodes") or [])]
     triage_values = {"issue_type": issue_type, **fields}
-    in_progress = (bool(linked_prs)
-                   or norm_status(fields.get("status")) in in_progress_statuses
-                   or (bool(triaged_when_set)
-                       and all(triage_values.get(f) for f in triaged_when_set)))
+    triaged = (bool(triaged_when_set)
+               and all(triage_values.get(f) for f in triaged_when_set))
+    worked_on = (bool(linked_prs)
+                 or norm_status(fields.get("status")) in in_progress_statuses)
 
-    if in_progress and state in ("needs_first_response", "awaiting_maintainer"):
+    if state == "needs_first_response" and triaged:
+        state = "in_progress"
+    elif state == "awaiting_maintainer" and (triaged or worked_on):
         state = "in_progress"
 
     section = "stale" if last_ts < stale_cutoff else state
