@@ -24,7 +24,7 @@ first:
 
 | Column | Meaning |
 |---|---|
-| **Needs first response** | No maintainer has engaged yet |
+| **Needs first response** | No maintainer has engaged yet and the `triaged_when_set` fields are not all set |
 | **Awaiting maintainer** | Author/community acted last (replied, pushed, resolved threads) — the working queue |
 | **Awaiting author** | A maintainer responded last; ball is with the author |
 | **In progress** | Dealt with, not waiting on triage — any of: an open PR closes the issue, its project `Status` is one of `in_progress_statuses`, or the `triaged_when_set` fields (issue type + Priority) are all set |
@@ -34,9 +34,12 @@ Classification rule: if the last non-bot actor is a maintainer (and not the
 item's own author), the item is *awaiting author*; otherwise it's *awaiting
 maintainer* (or *needs first response* if no maintainer has ever engaged).
 An item that is already being worked on is not waiting on anyone, so *in
-progress* takes over from *needs first response* and *awaiting maintainer* —
-it never hides an item from *awaiting author*, and *stale* still wins over
-everything.
+progress* takes over from *awaiting maintainer* through any of its three
+routes. It takes over from *needs first response* only through the
+`triaged_when_set` route: a linked PR or an in-progress `Status` does not fill
+in the triage fields, so an issue nobody has triaged stays in *needs first
+response* until a maintainer sets them. *In progress* never hides an item from
+*awaiting author*, and *stale* still wins over everything.
 
 Inline (diff) comments count as engagement in full: only the review that
 *opens* a review thread appears in the PR timeline, so every comment of every
